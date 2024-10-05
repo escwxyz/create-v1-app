@@ -12,11 +12,27 @@ impl log::Log for ColoredLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             let level_str = match record.level() {
-                Level::Error => format!("{}{}", Emoji("🚨 ", ""), style("ERROR").red().bold()),
-                Level::Warn => format!("{}{}", Emoji("🚧 ", ""), style("WARN ").yellow().bold()),
-                Level::Info => format!("{}{}", Emoji("🚀 ", ""), style("INFO ").green().bold()),
-                Level::Debug => format!("{}{}", Emoji("🔍 ", ""), style("DEBUG").blue().bold()),
-                Level::Trace => format!("{}{}", Emoji("🔎 ", ""), style("TRACE").magenta().bold()),
+                Level::Error => {
+                    format!("{}{}", Emoji("🚨 ", ""), style("ERROR").red().bold().dim())
+                }
+                Level::Warn => format!(
+                    "{}{}",
+                    Emoji("🚧 ", ""),
+                    style("WARN ").yellow().bold().dim()
+                ),
+                Level::Info => format!(
+                    "{}{}",
+                    Emoji("🚀 ", ""),
+                    style("INFO ").green().bold().dim()
+                ),
+                Level::Debug => {
+                    format!("{}{}", Emoji("🔍 ", ""), style("DEBUG").blue().bold().dim())
+                }
+                Level::Trace => format!(
+                    "{}{}",
+                    Emoji("🔎 ", ""),
+                    style("TRACE").magenta().bold().dim()
+                ),
             };
 
             println!("{} - {}", level_str, record.args());

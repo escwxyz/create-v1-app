@@ -11,9 +11,7 @@ static CLEANUP_NEEDED: AtomicBool = AtomicBool::new(false);
 
 fn cleanup() {
     if CLEANUP_NEEDED.load(Ordering::SeqCst) {
-        // Perform cleanup operations here
         logger::log_debug("Cleaning up...");
-        // Add your cleanup logic here, e.g., deleting created files
         logger::log_debug("Cleanup completed.");
     }
 }
@@ -25,7 +23,7 @@ pub fn run(args: Vec<String>) -> Result<()> {
     let r = running.clone();
 
     ctrlc::set_handler(move || {
-        // logger::log_debug("Received Ctrl+C, initiating graceful shutdown...");
+        logger::log_debug("Received Ctrl+C, initiating graceful shutdown...");
         r.store(false, Ordering::SeqCst);
         CLEANUP_NEEDED.store(true, Ordering::SeqCst);
         cleanup();

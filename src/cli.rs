@@ -8,7 +8,7 @@ use crate::utils::{create_new_app, run_interactive_dialogue};
 #[command(name = "create-v1-app")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -52,21 +52,19 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
 
     let cli = Cli::parse_from(args);
 
-    // let cli = Cli::parse_from(std::iter::once("create-v1-app".to_string()).chain(args));
-
     match cli.command {
-        Commands::New {
+        Some(Commands::New {
             name,
             services,
             package_manager,
-        } => {
+        }) => {
             let services = services.unwrap_or_default();
 
             let package_manager = package_manager.unwrap_or("npm".to_string());
 
             create_new_app(&name, &services, Some(&package_manager))
         }
-        Commands::Add { subcommand } => {
+        Some(Commands::Add { subcommand }) => {
             // TODO: we should also know which package manager the user uses
             match subcommand {
                 AddSubcommands::Service { service_name: _ } => {
@@ -80,5 +78,6 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
                 }
             }
         }
+        None => run_interactive_dialogue(),
     }
 }
