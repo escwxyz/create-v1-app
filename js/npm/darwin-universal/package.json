@@ -1,0 +1,15 @@
+{
+  "name": "create-v1-app-darwin-universal",
+  "version": "0.0.0",
+  "os": [
+    "darwin"
+  ],
+  "main": "create-v1-app.darwin-universal.node",
+  "files": [
+    "create-v1-app.darwin-universal.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  }
+}

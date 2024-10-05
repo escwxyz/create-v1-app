@@ -1,0 +1,8 @@
+edition = "2021"
+
+# rustfmt.toml
+
+# This file is used to configure rustfmt.
+# For more information about the syntax, see:
+# https://rust-lang.github.io/rustfmt/
+

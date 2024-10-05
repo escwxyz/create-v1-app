@@ -1,0 +1,9 @@
+# target
+target
+
+# templates
+# we don't want to commit the templates for now
+templates
+# we will add test & workflows later at root level
+js/.github/workflows
+js/__test__ 

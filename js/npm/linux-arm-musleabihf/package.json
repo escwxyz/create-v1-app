@@ -1,0 +1,18 @@
+{
+  "name": "create-v1-app-linux-arm-musleabihf",
+  "version": "0.0.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm"
+  ],
+  "main": "create-v1-app.linux-arm-musleabihf.node",
+  "files": [
+    "create-v1-app.linux-arm-musleabihf.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  }
+}
