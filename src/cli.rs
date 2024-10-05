@@ -18,10 +18,10 @@ enum Commands {
         #[arg(help = "The name of the new project")]
         name: String,
 
-        #[arg(long, help = "A list of services to add to the project")]
+        #[arg(short, long, help = "A list of services to add to the project")]
         services: Option<Vec<String>>,
 
-        #[arg(long, help = "The package manager to use for the project")]
+        #[arg(short, long, help = "The package manager to use for the project")]
         package_manager: Option<String>,
     },
     #[command(about = "Add a service or provider to an existing V1 app")]

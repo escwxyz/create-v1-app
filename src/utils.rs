@@ -2,17 +2,24 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
+    thread,
     time::Instant,
 };
 
+use anyhow::anyhow;
 use anyhow::Result;
 use console::style;
 use dialoguer::{Input, MultiSelect};
-use indicatif::HumanDuration;
+use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
+use log::{debug, error, info};
 use tera::Context;
 use walkdir::WalkDir;
 
-use crate::tera::{initialize_tera, TERA};
+use crate::{
+    logger::{log_debug, log_error, log_info},
+    tera::{initialize_tera, TERA},
+};
 
 pub fn create_new_app(
     name: &str,
@@ -20,15 +27,18 @@ pub fn create_new_app(
     package_manager: Option<&str>,
 ) -> Result<()> {
     let start_time = Instant::now();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
 
     // TODO: indicator for creating new V1 app
     // TODO: divided into multiple steps
 
-    // log_debug(&format!("Creating new V1 app: {}", name));
-    // log_info(&format!("Services: {:?}", services));
+    log_debug(&format!("Creating new V1 app: {}", name));
+    log_info(&format!("Services: {:?}", services));
 
     let package_manager = confirm_package_manager(package_manager)?;
-    // log_info(&format!("Using package manager: {}", package_manager));
+    log_info(&format!("Using package manager: {}", package_manager));
 
     // init tera
     initialize_tera()?;
@@ -37,6 +47,13 @@ pub fn create_new_app(
     context.insert("project_name", name);
     context.insert("services", services);
     context.insert("package_manager", &package_manager);
+
+    // let total_steps = 4 + services.len();
+
+    // log_info(&format!(
+    //     "[1/{}] Creating project structure...",
+    //     total_steps
+    // ));
 
     let project_path = Path::new(name);
     fs::create_dir_all(project_path)?;
@@ -52,15 +69,22 @@ pub fn create_new_app(
     fs::create_dir_all(&packages_path)?;
 
     // Add selected services
-    for service in services {
+    for (step, service) in services.iter().enumerate() {
+        // log_info(&format!(
+        //     "[{}/{}] Adding service: {}",
+        //     step + 2,
+        //     total_steps,
+        //     service
+        // ));
         add_service(project_path, service, &context)?;
     }
 
+    // log_info(&format!("[3/{}] Installing dependencies...", total_steps));
     // Install dependencies
     // TODO: Install dependencies asynchronously
     // TODO: Add a progress bar
     // TODO: temep disactive
-    // install_dependencies(project_path, &package_manager)?;
+    install_dependencies(project_path, &package_manager)?;
 
     println!(
         "{}{}",
@@ -199,29 +223,106 @@ fn render_tera_templates(project_path: &Path, context: &tera::Context) -> Result
     Ok(())
 }
 
-#[allow(dead_code)]
-fn install_dependencies(project_path: &Path, package_manager: &str) -> Result<()> {
+pub fn install_dependencies(project_path: &Path, package_manager: &str) -> Result<()> {
     let install_command = match package_manager {
         "npm" => "install",
         "yarn" => "install",
         "pnpm" => "install",
         "bun" => "install",
-        _ => return Err(anyhow::anyhow!("Unsupported package manager")),
+        _ => return Err(anyhow!("Unsupported package manager")),
     };
 
-    // TODO progress & multiple threads?
-    // https://github.com/console-rs/indicatif/blob/HEAD/examples/yarnish.rs
+    let multi_progress = Arc::new(MultiProgress::new());
+    let style = ProgressStyle::default_bar()
+        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+        .unwrap()
+        .progress_chars("##-");
 
-    Command::new(package_manager)
-        .arg(install_command)
-        .current_dir(project_path)
-        .output()
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let workspaces = get_workspaces(project_path)?;
+    let mut handles = vec![];
+
+    for workspace in workspaces {
+        let mp = multi_progress.clone();
+        let pb = mp.add(ProgressBar::new(100));
+        pb.set_style(style.clone());
+        pb.set_message(format!("Installing {}", workspace.display()));
+
+        let package_manager = package_manager.to_string();
+        let install_command = install_command.to_string();
+        let workspace_path = workspace.to_path_buf();
+
+        let handle = thread::spawn(move || {
+            log_debug(&format!(
+                "Starting installation for workspace: {}",
+                workspace_path.display()
+            ));
+            log_debug(&format!(
+                "Running command: {} {}",
+                package_manager, install_command
+            ));
+
+            let output = Command::new(&package_manager)
+                .arg(&install_command)
+                .current_dir(&workspace_path)
+                .output()?;
+
+            log_debug(&format!(
+                "Installation command completed for {}",
+                workspace_path.display()
+            ));
+
+            if !output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log_error(&format!(
+                    "Installation failed in {}:\nStdout: {}\nStderr: {}",
+                    workspace_path.display(),
+                    stdout,
+                    stderr
+                ));
+                return Err(anyhow!(
+                    "Installation failed in {}:\nStdout: {}\nStderr: {}",
+                    workspace_path.display(),
+                    stdout,
+                    stderr
+                ));
+            }
+
+            let node_modules_path = workspace_path.join("node_modules");
+            if !node_modules_path.exists() {
+                return Err(anyhow!(
+                    "node_modules not created in {}",
+                    workspace_path.display()
+                ));
+            }
+
+            pb.finish_with_message(format!("Installed {}", workspace_path.display()));
+            Ok(())
+        });
+
+        handles.push(handle);
+    }
+
+    let results: Vec<Result<()>> = handles
+        .into_iter()
+        .map(|h| h.join().unwrap_or(Err(anyhow!("Thread panicked"))))
+        .collect();
+
+    for result in &results {
+        if let Err(e) = result {
+            eprintln!("Installation error: {}", e);
+        }
+    }
+
+    if results.iter().any(|r| r.is_err()) {
+        return Err(anyhow!("One or more installations failed"));
+    }
+
     Ok(())
 }
 
 pub fn add_service(project_path: &Path, service: &str, context: &Context) -> Result<()> {
-    // log_info(&format!("Adding service: {}", service));
+    log_info(&format!("Adding service: {}", service));
 
     let service_src = PathBuf::from("templates").join("services").join(service);
     let service_dst = project_path.join("packages").join(service);
@@ -303,4 +404,14 @@ fn copy_non_template_files(src_dir: &Path, dst_dir: &Path) -> std::io::Result<()
         }
     }
     Ok(())
+}
+
+fn get_workspaces(project_path: &Path) -> Result<Vec<PathBuf>> {
+    Ok(vec![
+        project_path.to_path_buf(), // Include the root project
+        project_path.join("apps/web"),
+        project_path.join("apps/api"),
+        project_path.join("apps/app"),
+        // TODO need a better way to get all packages, we get services from args
+    ])
 }
