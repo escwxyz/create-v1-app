@@ -2,10 +2,13 @@ use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+mod app;
 mod cli;
 mod logger;
+mod service;
 mod tera;
 mod utils;
+mod workspace;
 
 static CLEANUP_NEEDED: AtomicBool = AtomicBool::new(false);
 

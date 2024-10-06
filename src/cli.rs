@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use dialoguer::Input;
 
-use crate::utils::{create_new_app, run_interactive_dialogue};
+use crate::app::create_new_app;
+use crate::{service::select_services, utils::select_package_manager};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -79,5 +81,40 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
             }
         }
         None => run_interactive_dialogue(),
+    }
+}
+
+fn run_interactive_dialogue() -> Result<()> {
+    let selection = dialoguer::Select::new()
+        .with_prompt("What would you like to do?") // TODO style
+        .items(&["Create a new V1 app", "Add a service to an existing V1 app"])
+        .default(0)
+        .interact()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    match selection {
+        0 => {
+            // create new app
+            let name: String = Input::new()
+                .with_prompt("Enter the project name") // TODO style
+                .interact()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+            let services = select_services()?;
+            let package_manager = select_package_manager()?;
+
+            create_new_app(&name, &services, Some(&package_manager))
+        }
+        1 => {
+            // add service to existing app
+            let _service: String = Input::new()
+                .with_prompt("Enter the service name") // TODO style
+                .interact()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            // TODO: we need to get the project_name and project_path (current working directory)
+            // add_service(&service)
+            Ok(())
+        }
+        _ => unreachable!(),
     }
 }
