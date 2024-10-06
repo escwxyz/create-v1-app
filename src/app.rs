@@ -4,22 +4,21 @@ use indicatif::HumanDuration;
 use std::{fs, path::Path, time::Instant};
 use tera::Context;
 
+use crate::cli::Service;
+use crate::logger::log_debug;
 use crate::workspace::{get_workspaces, Workspace};
 use crate::{
-    logger::{log_debug, log_info},
+    logger::log_info,
     tera::{initialize_tera, TERA},
     workspace::process_workspace,
 };
 
 pub fn create_new_app(
     name: &str,
-    services: &[String],
+    services: &[Service],
     package_manager: Option<&str>,
 ) -> Result<()> {
     let start_time = Instant::now();
-
-    log_debug(&format!("Creating new V1 app: {}", name));
-    log_info(&format!("Services: {:?}", services));
 
     let package_manager = crate::utils::confirm_package_manager(package_manager)?;
     log_info(&format!("Using package manager: {}", package_manager));
@@ -29,9 +28,22 @@ pub fn create_new_app(
 
     let tera = TERA.lock().unwrap();
 
+    log_debug(&format!(
+        "Creating new app: {} with {} service(s) by {}",
+        name,
+        services.len(),
+        package_manager
+    ));
+
     let mut context = Context::new();
     context.insert("project_name", name);
-    context.insert("services", services);
+    // context.insert(
+    //     "services",
+    //     &services
+    //         .iter()
+    //         .map(|s| s.to_string())
+    //         .collect::<Vec<String>>(),
+    // );
     context.insert("package_manager", &package_manager);
 
     let project_path = Path::new(name);
@@ -52,8 +64,8 @@ pub fn create_new_app(
         for service in services {
             let workspace = Workspace {
                 name: service.to_string(),
-                source_path: templates_root.join("services").join(service),
-                dest_path: project_path.join("packages").join(service),
+                source_path: templates_root.join("services").join(service.to_string()),
+                dest_path: project_path.join("packages").join(service.to_string()),
                 is_root: false,
             };
             workspaces.push(workspace);

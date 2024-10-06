@@ -1,15 +1,12 @@
+use anyhow::Result;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-use anyhow::Result;
-
 use tera::Tera;
 use walkdir::WalkDir;
 
 use crate::logger::log_debug;
-
 pub struct Workspace {
     pub name: String,
     pub source_path: PathBuf,
@@ -67,9 +64,20 @@ fn process_template(
 ) -> Result<()> {
     log_debug(&format!("Processing template: {}", template_name));
 
+    // Skip pnpm-workspace.yaml if package manager is not pnpm
+    if template_name.ends_with("pnpm-workspace.yaml.tera") && package_manager != "pnpm" {
+        log_debug(&format!(
+            "Skipping pnpm-workspace.yaml for non-pnpm project"
+        ));
+        return Ok(());
+    }
+
     // Handle package.json.*.tera files
-    if template_name.ends_with("package.json.tera") {
+    if template_name.starts_with("package.json.") {
         if !workspace.is_root {
+            log_debug(&format!(
+                "Skipping package.json template for non-root workspace"
+            ));
             return Ok(()); // Skip for non-root workspaces
         }
         let pm_suffix = template_name
@@ -78,13 +86,12 @@ fn process_template(
             .last()
             .unwrap_or("");
         if pm_suffix != package_manager && pm_suffix != "base" {
+            log_debug(&format!(
+                "Skipping non-matching package.json template: {}",
+                template_name
+            ));
             return Ok(());
         }
-    }
-
-    // Skip pnpm-workspace.yaml if package manager is not pnpm
-    if template_name.ends_with("pnpm-workspace.yaml.tera") && package_manager != "pnpm" {
-        return Ok(());
     }
 
     let rendered = tera
@@ -93,6 +100,7 @@ fn process_template(
 
     // Skip empty templates (conditionally excluded)
     if rendered.trim().is_empty() {
+        log_debug(&format!("Skipping empty template: {}", template_name));
         return Ok(());
     }
 
@@ -105,10 +113,11 @@ fn process_template(
         .with_extension("");
 
     // Rename package.json.{pm}.tera to package.json for root workspace
-    if workspace.is_root
-        && template_name.ends_with("package.json.tera")
-        && !template_name.ends_with("base.tera")
-    {
+    if workspace.is_root && template_name.starts_with("package.json.") {
+        if template_name.ends_with("base.tera") {
+            log_debug(&format!("Skipping base package.json template"));
+            return Ok(());
+        }
         dest_path = workspace.dest_path.join("package.json");
     }
 

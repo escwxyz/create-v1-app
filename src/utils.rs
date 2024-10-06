@@ -1,4 +1,36 @@
-use anyhow::Result;
+use std::path::Path;
+
+use anyhow::{anyhow, Result};
+
+pub struct PackageJson {
+    pub name: String,
+    pub package_manager: String,
+}
+
+pub fn get_package_json(dir: Option<&Path>) -> Result<PackageJson> {
+    let current_dir = dir.unwrap_or_else(|| Path::new("."));
+    let package_json_path = current_dir.join("package.json");
+
+    if !package_json_path.exists() {
+        return Err(anyhow!("package.json not found in the current directory"));
+    }
+
+    let package_json = std::fs::read_to_string(package_json_path)?;
+    let package_json: serde_json::Value = serde_json::from_str(&package_json)?;
+
+    let name = package_json["name"]
+        .as_str()
+        .ok_or_else(|| anyhow!("name not found in package.json"))?;
+
+    let package_manager = package_json["packageManager"]
+        .as_str()
+        .ok_or_else(|| anyhow!("packageManager not found in package.json"))?;
+
+    Ok(PackageJson {
+        name: name.to_string(),
+        package_manager: package_manager.to_string(),
+    })
+}
 
 pub fn select_package_manager() -> Result<String> {
     let package_managers = vec!["npm", "yarn", "pnpm", "bun"];

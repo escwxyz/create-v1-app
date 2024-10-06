@@ -286,6 +286,7 @@ dependencies = [
  "log",
  "napi-derive",
  "once_cell",
+ "serde_json",
  "tera",
  "walkdir",
 ]
