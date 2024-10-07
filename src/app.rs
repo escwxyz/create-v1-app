@@ -8,6 +8,7 @@ use crate::cli::Service;
 use crate::logger::log_debug;
 use crate::utils::install_dependencies;
 use crate::workspace::{get_workspaces, Workspace};
+use crate::{cleanup, CLEANUP_MANAGER};
 use crate::{
     logger::log_info,
     tera::{initialize_tera, TERA},
@@ -48,6 +49,19 @@ pub fn create_new_app(
 
     let packages_path = project_path.join("packages");
     fs::create_dir_all(&packages_path)?;
+
+    {
+        let mut manager = CLEANUP_MANAGER.lock().unwrap();
+        manager.add_task(cleanup::CleanupTask::RemoveDirectory(
+            project_path.to_path_buf(),
+        ));
+        manager.add_task(cleanup::CleanupTask::RemoveDirectory(
+            packages_path.to_path_buf(),
+        ));
+        manager.add_task(cleanup::CleanupTask::RemoveDirectory(
+            apps_path.to_path_buf(),
+        ));
+    }
 
     let templates_root = Path::new("templates");
 

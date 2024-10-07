@@ -6,11 +6,13 @@ use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect};
 use tera::Context;
 
 use crate::{
+    cleanup,
     cli::Service,
     logger::log_info,
     tera::TERA,
     utils::{get_package_json, PackageJson},
     workspace::{process_workspace, Workspace},
+    CLEANUP_MANAGER,
 };
 
 pub fn select_services() -> Result<Vec<Service>> {
@@ -84,6 +86,14 @@ pub fn add_services(
 
         new_workspaces.push(workspace.clone());
         workspaces.push(workspace.clone());
+
+        {
+            let mut manager = CLEANUP_MANAGER.lock().unwrap();
+            manager.add_task(cleanup::CleanupTask::RemoveService {
+                project_dir: Path::new(&name).to_path_buf(),
+                service_name: service.to_string(),
+            });
+        }
     }
 
     // we only add new files

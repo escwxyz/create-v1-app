@@ -1,8 +1,10 @@
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::Mutex;
 
 mod app;
+mod cleanup;
 mod cli;
 mod logger;
 mod service;
@@ -11,36 +13,37 @@ mod utils;
 mod workspace;
 
 static CLEANUP_NEEDED: AtomicBool = AtomicBool::new(false);
+static CLEANUP_MANAGER: Lazy<Mutex<cleanup::CleanupManager>> =
+    Lazy::new(|| Mutex::new(cleanup::CleanupManager::new()));
 
-fn cleanup() {
-    if CLEANUP_NEEDED.load(Ordering::SeqCst) {
-        logger::log_debug("Cleaning up...");
-        logger::log_debug("Cleanup completed.");
-    }
+fn perform_cleanup() {
+    let manager = CLEANUP_MANAGER.lock().unwrap();
+    manager.cleanup();
 }
 
-pub fn run(args: Vec<String>) -> Result<()> {
+pub fn set_cleanup_needed() {
+    CLEANUP_NEEDED.store(true, Ordering::SeqCst);
+    perform_cleanup();
+}
+
+pub fn run() -> Result<()> {
     logger::initialize_logger()?;
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-
-    ctrlc::set_handler(move || {
-        logger::log_debug("Received Ctrl+C, initiating graceful shutdown...");
-        r.store(false, Ordering::SeqCst);
+    ctrlc::set_handler(|| {
         CLEANUP_NEEDED.store(true, Ordering::SeqCst);
-        cleanup();
-        std::process::exit(0);
-    })
-    .expect("Error setting Ctrl-C handler");
+        perform_cleanup();
+        std::process::exit(1);
+    })?;
 
-    CLEANUP_NEEDED.store(true, Ordering::SeqCst);
-    let result = cli::parse_cli(args);
+    let args: Vec<String> = std::env::args().collect();
 
-    // Perform cleanup if needed
-    cleanup();
+    cli::parse_cli(args)?;
 
-    result
+    if CLEANUP_NEEDED.load(Ordering::SeqCst) {
+        perform_cleanup();
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
