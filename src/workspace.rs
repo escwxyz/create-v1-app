@@ -7,6 +7,7 @@ use tera::Tera;
 use walkdir::WalkDir;
 
 use crate::logger::log_debug;
+#[derive(Clone)]
 pub struct Workspace {
     pub name: String,
     pub source_path: PathBuf,

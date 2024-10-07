@@ -6,6 +6,7 @@ use tera::Context;
 
 use crate::cli::Service;
 use crate::logger::log_debug;
+use crate::utils::install_dependencies;
 use crate::workspace::{get_workspaces, Workspace};
 use crate::{
     logger::log_info,
@@ -37,13 +38,6 @@ pub fn create_new_app(
 
     let mut context = Context::new();
     context.insert("project_name", name);
-    // context.insert(
-    //     "services",
-    //     &services
-    //         .iter()
-    //         .map(|s| s.to_string())
-    //         .collect::<Vec<String>>(),
-    // );
     context.insert("package_manager", &package_manager);
 
     let project_path = Path::new(name);
@@ -94,8 +88,9 @@ pub fn create_new_app(
         "[{}/{}] Installing dependencies...",
         total_steps, total_steps
     ));
+
     // Install dependencies
-    // install_dependencies(project_path, &package_manager)?;
+    install_dependencies(project_path, &package_manager)?;
 
     println!(
         "{}{}",

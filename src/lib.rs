@@ -42,3 +42,16 @@ pub fn run(args: Vec<String>) -> Result<()> {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        use cli::Cli;
+
+        Cli::command().debug_assert();
+    }
+}

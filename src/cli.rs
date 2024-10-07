@@ -9,12 +9,14 @@ use dialoguer::Input;
 use crate::app::create_new_app;
 use crate::logger::log_debug;
 use crate::service::add_services;
+use crate::utils::{get_package_json, is_valid_project_name, PackageJson};
+use crate::workspace::get_workspaces;
 use crate::{service::select_services, utils::select_package_manager};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(name = "create-v1-app")]
-struct Cli {
+pub struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -129,7 +131,14 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
             AddSubcommands::Services(services) => {
                 log_debug(&format!("Adding services: {}", services.services.len()));
                 let templates_root = Path::new("templates");
-                add_services(&services.services, &templates_root)?;
+
+                let PackageJson {
+                    name,
+                    package_manager: _,
+                } = get_package_json(None)?;
+                let project_dir = Path::new(&name);
+                let mut workspaces = get_workspaces(templates_root, project_dir);
+                add_services(&mut workspaces, &services.services, &templates_root)?;
                 Ok(())
             }
             _ => unreachable!(),
@@ -151,7 +160,16 @@ fn run_interactive_dialogue() -> Result<()> {
             // create new app
             let name: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("Enter the project name")
-                .interact()
+                .default("myapp".into())
+                .validate_with(|input: &String| {
+                    if input.is_empty() {
+                        return Err(anyhow::anyhow!("Project name cannot be empty"));
+                    }
+                    // TODO
+                    is_valid_project_name(input)?;
+                    Ok(())
+                })
+                .interact_text()
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let services = select_services()?;
@@ -161,9 +179,9 @@ fn run_interactive_dialogue() -> Result<()> {
         }
         1 => {
             // add services to existing app
-            let services = select_services()?;
-            let templates_root = Path::new("templates");
-            add_services(&services, &templates_root)?;
+            let _services = select_services()?;
+            let _templates_root = Path::new("templates");
+            // add_services(&services, &templates_root)?;
             Ok(())
         }
         _ => unreachable!(),

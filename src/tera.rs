@@ -10,7 +10,6 @@ pub static TERA: Lazy<Arc<Mutex<Tera>>> = Lazy::new(|| Arc::new(Mutex::new(Tera:
 pub fn initialize_tera() -> Result<()> {
     let mut tera = TERA.lock().expect("Failed to lock Tera instance");
 
-    // Walk through the templates directory and add only .tera files
     for entry in WalkDir::new("templates").into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file()
             && entry.path().extension().map_or(false, |ext| ext == "tera")

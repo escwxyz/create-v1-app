@@ -56,7 +56,11 @@ pub fn select_services() -> Result<Vec<Service>> {
     Ok(result)
 }
 
-pub fn add_services(services: &[Service], templates_root: &Path) -> Result<()> {
+pub fn add_services(
+    workspaces: &mut Vec<Workspace>,
+    services: &[Service],
+    templates_root: &Path,
+) -> Result<()> {
     let tera = TERA.lock().unwrap();
 
     let PackageJson {
@@ -68,17 +72,22 @@ pub fn add_services(services: &[Service], templates_root: &Path) -> Result<()> {
     context.insert("project_name", &name);
     context.insert("package_manager", &package_manager);
 
-    let workspaces = services
-        .iter()
-        .map(|service| Workspace {
+    let mut new_workspaces: Vec<Workspace> = Vec::new();
+
+    for service in services {
+        let workspace = Workspace {
             name: service.to_string(),
             source_path: templates_root.join("services").join(service.to_string()),
             dest_path: Path::new(&name).join("packages").join(service.to_string()),
             is_root: false,
-        })
-        .collect::<Vec<Workspace>>();
+        };
 
-    for workspace in workspaces {
+        new_workspaces.push(workspace.clone());
+        workspaces.push(workspace.clone());
+    }
+
+    // we only add new files
+    for workspace in new_workspaces {
         log_info(&format!("Adding service: {}", workspace.name));
         process_workspace(
             &workspace,
