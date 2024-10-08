@@ -20,7 +20,6 @@ pub fn process_workspace(
     tera: &Tera,
     context: &tera::Context,
     package_manager: &str,
-    templates_root: &Path,
 ) -> Result<()> {
     log_debug(&format!("Processing workspace: {}", workspace.name));
 
@@ -39,8 +38,9 @@ pub fn process_workspace(
         if path.is_file() {
             let is_template = path.extension().map_or(false, |ext| ext == "tera");
             let relative_path = path
-                .strip_prefix(templates_root)
+                .strip_prefix(&workspace.source_path)
                 .map_err(|e| anyhow::anyhow!("Failed to strip prefix from path: {}", e))?;
+
             let file_name = relative_path
                 .to_str()
                 .ok_or_else(|| anyhow::anyhow!("Failed to convert path to string"))?;

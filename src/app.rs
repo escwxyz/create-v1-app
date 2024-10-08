@@ -6,7 +6,7 @@ use tera::Context;
 
 use crate::cli::Service;
 use crate::logger::log_debug;
-use crate::utils::install_dependencies;
+use crate::utils::get_templates_path;
 use crate::workspace::{get_workspaces, Workspace};
 use crate::{cleanup, CLEANUP_MANAGER};
 use crate::{
@@ -63,9 +63,9 @@ pub fn create_new_app(
         ));
     }
 
-    let templates_root = Path::new("templates");
+    let templates_root = get_templates_path();
 
-    let mut workspaces = get_workspaces(templates_root, project_path);
+    let mut workspaces = get_workspaces(&templates_root, project_path);
 
     // if we specify some services, we add them to the workspace
     if !services.is_empty() {
@@ -89,13 +89,7 @@ pub fn create_new_app(
             total_steps,
             workspace.name
         ));
-        process_workspace(
-            &workspace,
-            &tera,
-            &context,
-            &package_manager,
-            templates_root,
-        )?;
+        process_workspace(&workspace, &tera, &context, &package_manager)?;
     }
 
     log_info(&format!(
@@ -104,7 +98,7 @@ pub fn create_new_app(
     ));
 
     // Install dependencies
-    install_dependencies(project_path, &package_manager)?;
+    // install_dependencies(project_path, &package_manager)?;
 
     println!(
         "{}{}",

@@ -9,7 +9,7 @@ use dialoguer::Input;
 use crate::app::create_new_app;
 use crate::logger::log_debug;
 use crate::service::add_services;
-use crate::utils::{get_package_json, is_valid_project_name, PackageJson};
+use crate::utils::{get_package_json, get_templates_path, is_valid_project_name, PackageJson};
 use crate::workspace::get_workspaces;
 use crate::{service::select_services, utils::select_package_manager};
 
@@ -132,15 +132,15 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
         Some(Commands::Add { subcommand }) => match subcommand {
             AddSubcommands::Services(services) => {
                 log_debug(&format!("Adding services: {}", services.services.len()));
-                let templates_root = Path::new("templates");
+                let templates_root = get_templates_path();
 
                 let PackageJson {
                     name,
                     package_manager: _,
                 } = get_package_json(None)?;
                 let project_dir = Path::new(&name);
-                let mut workspaces = get_workspaces(templates_root, project_dir);
-                add_services(&mut workspaces, &services.services, &templates_root)?;
+                let mut workspaces = get_workspaces(&templates_root, project_dir);
+                add_services(&mut workspaces, &services.services)?;
                 Ok(())
             }
             _ => unreachable!(),
@@ -176,7 +176,7 @@ fn run_interactive_dialogue() -> Result<()> {
             // add services to existing app
             let _services = select_services()?;
             let _templates_root = Path::new("templates");
-            // add_services(&services, &templates_root)?;
+            //add_services(&services, &templates_root)?;
             Ok(())
         }
         _ => unreachable!(),

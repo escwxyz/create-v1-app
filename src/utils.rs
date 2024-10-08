@@ -2,6 +2,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
     thread,
+    time::Duration,
 };
 
 use anyhow::{anyhow, Result};
@@ -122,21 +123,26 @@ pub fn install_workspace_dependencies(
         workspace_path.display()
     ));
 
-    let install_command = match package_manager {
-        "npm" => "install",
-        "yarn" => "install",
-        "pnpm" => "install",
-        "bun" => "install",
-        _ => return Err(anyhow!("Unsupported package manager: {}", package_manager)),
-    };
+    log_debug(&format!("Running command: {} install", package_manager));
 
-    log_debug(&format!(
-        "Running command: {} {}",
-        package_manager, install_command
-    ));
+    let pb = progress_bar.unwrap_or_else(|| {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap()
+                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+        );
+        pb.set_message(format!(
+            "Installing dependencies for {}",
+            workspace_path.display()
+        ));
+        pb.enable_steady_tick(Duration::from_millis(100));
+        pb
+    });
 
     let output = std::process::Command::new(package_manager)
-        .arg(install_command)
+        .arg("install")
         .current_dir(workspace_path)
         .output()?;
 
@@ -148,31 +154,26 @@ pub fn install_workspace_dependencies(
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log_error(&format!(
+        let error_message = format!(
             "Installation failed in {}:\nStdout: {}\nStderr: {}",
             workspace_path.display(),
             stdout,
             stderr
-        ));
-        return Err(anyhow!(
-            "Installation failed in {}:\nStdout: {}\nStderr: {}",
-            workspace_path.display(),
-            stdout,
-            stderr
-        ));
+        );
+        log_error(&error_message);
+        pb.finish_with_message("Installation failed");
+        return Err(anyhow!(error_message));
     }
 
     let node_modules_path = workspace_path.join("node_modules");
     if !node_modules_path.exists() {
-        return Err(anyhow!(
-            "node_modules not created in {}",
-            workspace_path.display()
-        ));
+        let error_message = format!("node_modules not created in {}", workspace_path.display());
+        log_error(&error_message);
+        pb.finish_with_message("Installation failed");
+        return Err(anyhow!(error_message));
     }
 
-    if let Some(pb) = progress_bar {
-        pb.finish_with_message(format!("Installed {}", workspace_path.display()));
-    }
+    pb.finish_with_message(format!("Installed {}", workspace_path.display()));
 
     Ok(())
 }

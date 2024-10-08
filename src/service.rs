@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::Result;
 use clap::ValueEnum;
 use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect};
@@ -10,7 +8,7 @@ use crate::{
     cli::Service,
     logger::log_info,
     tera::TERA,
-    utils::{get_package_json, PackageJson},
+    utils::{get_package_json, get_templates_path, PackageJson},
     workspace::{process_workspace, Workspace},
     CLEANUP_MANAGER,
 };
@@ -58,11 +56,7 @@ pub fn select_services() -> Result<Vec<Service>> {
     Ok(result)
 }
 
-pub fn add_services(
-    workspaces: &mut Vec<Workspace>,
-    services: &[Service],
-    templates_root: &Path,
-) -> Result<()> {
+pub fn add_services(workspaces: &mut Vec<Workspace>, services: &[Service]) -> Result<()> {
     let tera = TERA.lock().unwrap();
 
     let PackageJson {
@@ -74,13 +68,25 @@ pub fn add_services(
     context.insert("project_name", &name);
     context.insert("package_manager", &package_manager);
 
+    let templates_root = get_templates_path();
+
+    let current_dir = std::env::current_dir()?;
+
     let mut new_workspaces: Vec<Workspace> = Vec::new();
 
     for service in services {
+        let service_template_path = templates_root.join("services").join(service.to_string());
+        if !service_template_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Service template not found for: {}",
+                service.to_string()
+            ));
+        }
+
         let workspace = Workspace {
             name: service.to_string(),
-            source_path: templates_root.join("services").join(service.to_string()),
-            dest_path: Path::new(&name).join("packages").join(service.to_string()),
+            source_path: service_template_path.clone(),
+            dest_path: current_dir.join("packages").join(service.to_string()),
             is_root: false,
         };
 
@@ -90,7 +96,7 @@ pub fn add_services(
         {
             let mut manager = CLEANUP_MANAGER.lock().unwrap();
             manager.add_task(cleanup::CleanupTask::RemoveService {
-                project_dir: Path::new(&name).to_path_buf(),
+                project_dir: current_dir.clone(),
                 service_name: service.to_string(),
             });
         }
@@ -99,13 +105,8 @@ pub fn add_services(
     // we only add new files
     for workspace in new_workspaces {
         log_info(&format!("Adding service: {}", workspace.name));
-        process_workspace(
-            &workspace,
-            &tera,
-            &context,
-            &package_manager,
-            templates_root,
-        )?;
+        process_workspace(&workspace, &tera, &context, &package_manager)?;
+        // TODO: install dependencies for newly added service packages
     }
 
     Ok(())
