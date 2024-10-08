@@ -121,6 +121,8 @@ pub fn parse_cli(args: Vec<String>) -> Result<()> {
             services,
             package_manager,
         }) => {
+            is_valid_project_name(&name)?;
+
             let services = services.unwrap_or_default();
 
             let package_manager = package_manager.unwrap_or("npm".to_string());
@@ -161,14 +163,7 @@ fn run_interactive_dialogue() -> Result<()> {
             let name: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("Enter the project name")
                 .default("myapp".into())
-                .validate_with(|input: &String| {
-                    if input.is_empty() {
-                        return Err(anyhow::anyhow!("Project name cannot be empty"));
-                    }
-                    // TODO
-                    is_valid_project_name(input)?;
-                    Ok(())
-                })
+                .validate_with(|input: &String| is_valid_project_name(input))
                 .interact_text()
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 

@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc, thread};
 
 use anyhow::{anyhow, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use regex::Regex;
 
 use crate::{
     logger::{log_debug, log_error},
@@ -40,8 +41,8 @@ pub fn get_package_json(dir: Option<&Path>) -> Result<PackageJson> {
 
 pub fn select_package_manager() -> Result<String> {
     let package_managers = vec!["npm", "yarn", "pnpm", "bun"];
-    let selection = dialoguer::Select::new()
-        .with_prompt("Select a package manager") // TODO style
+    let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt("Select a package manager")
         .items(&package_managers)
         .default(0)
         .interact()
@@ -153,11 +154,50 @@ pub fn install_dependencies(project_path: &Path, package_manager: &str) -> Resul
     Ok(())
 }
 
-pub fn is_valid_project_name(name: &String) -> Result<()> {
-    // TODO: check if the project name is valid
-    if name.contains(" ") {
-        return Err(anyhow::anyhow!("Project name cannot contain spaces"));
+pub fn is_valid_project_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(anyhow!("Project name cannot be empty"));
+    }
+
+    if !name.chars().next().unwrap().is_ascii_alphabetic() {
+        return Err(anyhow!("Project name must start with a letter"));
+    }
+
+    let re = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_-]*$").unwrap();
+    if !re.is_match(name) {
+        return Err(anyhow!(
+            "Project name can only contain letters, numbers, dashes, and underscores"
+        ));
+    }
+
+    if name.len() > 20 {
+        return Err(anyhow!("Project name is too long (maximum 20 characters)"));
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_project_names() {
+        assert!(is_valid_project_name("myproject").is_ok());
+        assert!(is_valid_project_name("my-project").is_ok());
+        assert!(is_valid_project_name("my_project").is_ok());
+        assert!(is_valid_project_name("MyProject123").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_project_names() {
+        assert!(is_valid_project_name("").is_err());
+        assert!(is_valid_project_name("123project").is_err());
+        assert!(is_valid_project_name("-project").is_err());
+        assert!(is_valid_project_name("_project").is_err());
+        assert!(is_valid_project_name("my project").is_err());
+        assert!(is_valid_project_name("my@project").is_err());
+        assert!(is_valid_project_name("MY_PROJECT!").is_err());
+        assert!(is_valid_project_name("myproject12345678901234567890").is_err());
+    }
 }
