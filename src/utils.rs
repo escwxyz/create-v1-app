@@ -1,4 +1,8 @@
-use std::{path::Path, sync::Arc, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 
 use anyhow::{anyhow, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -31,6 +35,9 @@ pub fn get_package_json(dir: Option<&Path>) -> Result<PackageJson> {
 
     let package_manager = package_json["packageManager"]
         .as_str()
+        .unwrap()
+        .split('@')
+        .next()
         .ok_or_else(|| anyhow!("packageManager not found in package.json"))?;
 
     Ok(PackageJson {
@@ -58,16 +65,13 @@ pub fn confirm_package_manager(package_manager: Option<&str>) -> Result<String> 
     }
 }
 
-pub fn install_dependencies(project_path: &Path, package_manager: &str) -> Result<()> {
+#[allow(dead_code)]
+pub fn install_all_dependencies(project_path: &Path, package_manager: &str) -> Result<()> {
     let multi_progress = Arc::new(MultiProgress::new());
     let style = ProgressStyle::default_bar()
         .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
         .unwrap()
         .progress_chars("##-");
-
-    // let style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-    //     .unwrap()
-    //     .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
 
     let workspaces = get_workspaces(Path::new("templates"), project_path);
     let mut handles = vec![];
@@ -79,56 +83,10 @@ pub fn install_dependencies(project_path: &Path, package_manager: &str) -> Resul
         pb.set_message(format!("Installing {}", workspace.name));
 
         let package_manager = package_manager.to_string();
-        let install_command = "install".to_string();
         let workspace_path = workspace.dest_path.to_path_buf();
 
         let handle = thread::spawn(move || {
-            log_debug(&format!(
-                "Starting installation for workspace: {}",
-                workspace_path.display()
-            ));
-            log_debug(&format!(
-                "Running command: {} {}",
-                package_manager, install_command
-            ));
-
-            let output = std::process::Command::new(&package_manager)
-                .arg(&install_command)
-                .current_dir(&workspace_path)
-                .output()?;
-
-            log_debug(&format!(
-                "Installation command completed for {}",
-                workspace_path.display()
-            ));
-
-            if !output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                log_error(&format!(
-                    "Installation failed in {}:\nStdout: {}\nStderr: {}",
-                    workspace_path.display(),
-                    stdout,
-                    stderr
-                ));
-                return Err(anyhow!(
-                    "Installation failed in {}:\nStdout: {}\nStderr: {}",
-                    workspace_path.display(),
-                    stdout,
-                    stderr
-                ));
-            }
-
-            let node_modules_path = workspace_path.join("node_modules");
-            if !node_modules_path.exists() {
-                return Err(anyhow!(
-                    "node_modules not created in {}",
-                    workspace_path.display()
-                ));
-            }
-
-            pb.finish_with_message(format!("Installed {}", workspace_path.display()));
-            Ok(())
+            install_workspace_dependencies(&workspace_path, &package_manager, Some(pb))
         });
 
         handles.push(handle);
@@ -154,6 +112,71 @@ pub fn install_dependencies(project_path: &Path, package_manager: &str) -> Resul
     Ok(())
 }
 
+pub fn install_workspace_dependencies(
+    workspace_path: &Path,
+    package_manager: &str,
+    progress_bar: Option<ProgressBar>,
+) -> Result<()> {
+    log_debug(&format!(
+        "Starting installation for workspace: {}",
+        workspace_path.display()
+    ));
+
+    let install_command = match package_manager {
+        "npm" => "install",
+        "yarn" => "install",
+        "pnpm" => "install",
+        "bun" => "install",
+        _ => return Err(anyhow!("Unsupported package manager: {}", package_manager)),
+    };
+
+    log_debug(&format!(
+        "Running command: {} {}",
+        package_manager, install_command
+    ));
+
+    let output = std::process::Command::new(package_manager)
+        .arg(install_command)
+        .current_dir(workspace_path)
+        .output()?;
+
+    log_debug(&format!(
+        "Installation command completed for {}",
+        workspace_path.display()
+    ));
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log_error(&format!(
+            "Installation failed in {}:\nStdout: {}\nStderr: {}",
+            workspace_path.display(),
+            stdout,
+            stderr
+        ));
+        return Err(anyhow!(
+            "Installation failed in {}:\nStdout: {}\nStderr: {}",
+            workspace_path.display(),
+            stdout,
+            stderr
+        ));
+    }
+
+    let node_modules_path = workspace_path.join("node_modules");
+    if !node_modules_path.exists() {
+        return Err(anyhow!(
+            "node_modules not created in {}",
+            workspace_path.display()
+        ));
+    }
+
+    if let Some(pb) = progress_bar {
+        pb.finish_with_message(format!("Installed {}", workspace_path.display()));
+    }
+
+    Ok(())
+}
+
 pub fn is_valid_project_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(anyhow!("Project name cannot be empty"));
@@ -175,6 +198,11 @@ pub fn is_valid_project_name(name: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn get_templates_path() -> PathBuf {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    PathBuf::from(manifest_dir).join("templates") // templates/ inside the CLI project root
 }
 
 #[cfg(test)]
